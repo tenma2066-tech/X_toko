@@ -5,7 +5,7 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from src.database import Base, ScheduledPost, PostStatus
+from src.database import Base, ScheduledPost, PostStatus, AppSetting
 
 
 @pytest_asyncio.fixture
@@ -67,3 +67,14 @@ async def test_query_scheduled(db_session: AsyncSession):
     )
     scheduled = result.scalars().all()
     assert len(scheduled) == 2
+
+
+@pytest.mark.asyncio
+async def test_app_setting(db_session: AsyncSession):
+    setting = AppSetting(key="test_key", value="test_value")
+    db_session.add(setting)
+    await db_session.commit()
+
+    row = await db_session.get(AppSetting, "test_key")
+    assert row is not None
+    assert row.value == "test_value"

@@ -210,6 +210,16 @@ h1 {
   justify-content: flex-end;
 }
 
+/* Login status */
+.login-status {
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+.status-ok { background: rgba(0,186,124,0.12); color: var(--success); }
+.status-err { background: rgba(244,33,46,0.12); color: var(--danger); }
+
 /* Empty state */
 .empty-state {
   text-align: center;

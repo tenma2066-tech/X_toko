@@ -3,15 +3,23 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from src.database import ScheduledPost, PostStatus, async_session
 from src.models import PostCreate, PostUpdate, PostResponse
+from src.x_client import check_login
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+
+
+# --- Health check (for Render keep-alive) ---
+
+@router.get("/health")
+async def health():
+    return {"status": "ok"}
 
 
 # --- Web UI routes ---
@@ -22,7 +30,14 @@ async def dashboard(request: Request):
         stmt = select(ScheduledPost).order_by(ScheduledPost.scheduled_at.desc())
         result = await session.execute(stmt)
         posts = result.scalars().all()
-    return templates.TemplateResponse("index.html", {"request": request, "posts": posts})
+
+    logged_in, login_msg = await check_login()
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "posts": posts,
+        "logged_in": logged_in,
+        "login_msg": login_msg,
+    })
 
 
 @router.get("/new", response_class=HTMLResponse)

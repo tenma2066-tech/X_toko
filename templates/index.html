@@ -2,6 +2,14 @@
 {% block content %}
 <h1>投稿一覧</h1>
 
+<div class="login-status {% if logged_in %}status-ok{% else %}status-err{% endif %}">
+  {% if logged_in %}
+    {{ login_msg }}
+  {% else %}
+    X未接続: {{ login_msg }}
+  {% endif %}
+</div>
+
 <div class="filters">
   <button class="filter-btn active" data-status="all">すべて</button>
   <button class="filter-btn" data-status="scheduled">予約中</button>

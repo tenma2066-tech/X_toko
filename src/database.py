@@ -37,11 +37,30 @@ class ScheduledPost(Base):
     updated_at: datetime = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class AppSetting(Base):
+    """Key-value store for app settings (e.g. twikit cookies)."""
+    __tablename__ = "app_settings"
+
+    key: str = Column(String(128), primary_key=True)
+    value: str = Column(Text, nullable=False)
+
+
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def get_session() -> AsyncSession:
+async def get_setting(key: str) -> str | None:
     async with async_session() as session:
-        return session
+        row = await session.get(AppSetting, key)
+        return row.value if row else None
+
+
+async def set_setting(key: str, value: str) -> None:
+    async with async_session() as session:
+        row = await session.get(AppSetting, key)
+        if row:
+            row.value = value
+        else:
+            session.add(AppSetting(key=key, value=value))
+        await session.commit()

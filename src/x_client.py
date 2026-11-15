@@ -1,54 +1,22 @@
-"""X (Twitter) API v2 client — Free tier (write-only, 1,500 tweets/month)."""
+"""X posting client using twikit (no API key, no fees)."""
 
 from __future__ import annotations
 
-import hashlib
-import hmac
-import base64
-import time
-import urllib.parse
-import uuid
+import json
+import logging
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 
-import httpx
+from twikit import Client
 
-from src.config import X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET
+from src.config import X_USERNAME, X_EMAIL, X_PASSWORD
+from src.database import get_setting, set_setting
 
-TWEET_ENDPOINT = "https://api.twitter.com/2/tweets"
+logger = logging.getLogger(__name__)
 
-
-def _percent_encode(s: str) -> str:
-    return urllib.parse.quote(s, safe="")
-
-
-def _build_oauth_header(method: str, url: str, body_params: dict | None = None) -> str:
-    oauth_params = {
-        "oauth_consumer_key": X_API_KEY,
-        "oauth_nonce": uuid.uuid4().hex,
-        "oauth_signature_method": "HMAC-SHA1",
-        "oauth_timestamp": str(int(time.time())),
-        "oauth_token": X_ACCESS_TOKEN,
-        "oauth_version": "1.0",
-    }
-
-    all_params = {**oauth_params}
-    if body_params:
-        all_params.update(body_params)
-
-    sorted_params = "&".join(
-        f"{_percent_encode(k)}={_percent_encode(v)}" for k, v in sorted(all_params.items())
-    )
-    base_string = f"{method.upper()}&{_percent_encode(url)}&{_percent_encode(sorted_params)}"
-    signing_key = f"{_percent_encode(X_API_SECRET)}&{_percent_encode(X_ACCESS_TOKEN_SECRET)}"
-    signature = base64.b64encode(
-        hmac.new(signing_key.encode(), base_string.encode(), hashlib.sha1).digest()
-    ).decode()
-
-    oauth_params["oauth_signature"] = signature
-    header_parts = ", ".join(
-        f'{_percent_encode(k)}="{_percent_encode(v)}"' for k, v in sorted(oauth_params.items())
-    )
-    return f"OAuth {header_parts}"
+_client: Client | None = None
+_COOKIES_KEY = "twikit_cookies"
 
 
 @dataclass
@@ -58,33 +26,73 @@ class TweetResult:
     error: str | None = None
 
 
-async def post_tweet(text: str) -> TweetResult:
-    if not all([X_API_KEY, X_API_SECRET, X_ACCESS_TOKEN, X_ACCESS_TOKEN_SECRET]):
-        return TweetResult(success=False, error="X API credentials not configured. Check .env file.")
+async def _get_client() -> Client:
+    global _client
+    if _client is not None:
+        return _client
 
-    auth_header = _build_oauth_header("POST", TWEET_ENDPOINT)
+    client = Client("ja")
 
-    async with httpx.AsyncClient() as client:
+    saved = await get_setting(_COOKIES_KEY)
+    if saved:
         try:
-            resp = await client.post(
-                TWEET_ENDPOINT,
-                json={"text": text},
-                headers={
-                    "Authorization": auth_header,
-                    "Content-Type": "application/json",
-                },
-                timeout=30.0,
-            )
-        except httpx.RequestError as exc:
-            return TweetResult(success=False, error=f"Network error: {exc}")
+            tmp = Path(tempfile.mktemp(suffix=".json"))
+            tmp.write_text(saved, encoding="utf-8")
+            client.load_cookies(str(tmp))
+            tmp.unlink(missing_ok=True)
+            _client = client
+            logger.info("Loaded saved cookies")
+            return _client
+        except Exception as exc:
+            logger.warning("Saved cookies invalid, re-login needed: %s", exc)
 
-    if resp.status_code == 201:
-        data = resp.json()
-        return TweetResult(success=True, tweet_id=data["data"]["id"])
+    if not all([X_USERNAME, X_PASSWORD]):
+        raise RuntimeError(
+            "X credentials not configured. Set X_USERNAME, X_EMAIL, X_PASSWORD in environment variables."
+        )
+
+    logger.info("Logging in to X as @%s ...", X_USERNAME)
+    await client.login(auth_info_1=X_USERNAME, auth_info_2=X_EMAIL, password=X_PASSWORD)
+    await _save_cookies(client)
+    _client = client
+    logger.info("Login successful")
+    return _client
+
+
+async def _save_cookies(client: Client) -> None:
+    tmp = Path(tempfile.mktemp(suffix=".json"))
+    client.save_cookies(str(tmp))
+    cookies_json = tmp.read_text(encoding="utf-8")
+    tmp.unlink(missing_ok=True)
+    await set_setting(_COOKIES_KEY, cookies_json)
+
+
+async def post_tweet(text: str) -> TweetResult:
+    try:
+        client = await _get_client()
+    except Exception as exc:
+        return TweetResult(success=False, error=f"Login failed: {exc}")
 
     try:
-        err_body = resp.json()
-        detail = err_body.get("detail") or err_body.get("title") or str(err_body)
-    except Exception:
-        detail = resp.text
-    return TweetResult(success=False, error=f"HTTP {resp.status_code}: {detail}")
+        tweet = await client.create_tweet(text=text)
+        await _save_cookies(client)
+        return TweetResult(success=True, tweet_id=str(tweet.id))
+    except Exception as exc:
+        logger.error("Tweet failed: %s", exc)
+        _reset_client()
+        return TweetResult(success=False, error=str(exc))
+
+
+def _reset_client() -> None:
+    global _client
+    _client = None
+
+
+async def check_login() -> tuple[bool, str]:
+    try:
+        client = await _get_client()
+        user = await client.user()
+        return True, f"@{user.screen_name} としてログイン中"
+    except Exception as exc:
+        _reset_client()
+        return False, str(exc)
