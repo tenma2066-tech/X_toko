@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>X 定期投稿システム</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/" class="logo">𝕏 定期投稿</a>
+      <a href="/new" class="btn btn-primary">＋ 新規投稿</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>X 定期投稿システム — Free tier (月1,500ツイート)</p>
+  </footer>
+</body>
+</html>

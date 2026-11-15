@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>新規投稿を予約</h1>
+
+<form id="create-form" class="post-form">
+  <div class="form-group">
+    <label for="content">投稿内容</label>
+    <textarea id="content" name="content" maxlength="280" rows="4" required placeholder="投稿内容を入力..."></textarea>
+    <span class="char-count"><span id="char-current">0</span> / 280</span>
+  </div>
+
+  <div class="form-group">
+    <label for="scheduled_at">投稿日時</label>
+    <input type="datetime-local" id="scheduled_at" name="scheduled_at" required>
+  </div>
+
+  <div class="form-actions">
+    <a href="/" class="btn">キャンセル</a>
+    <button type="submit" class="btn btn-primary">予約する</button>
+  </div>
+</form>
+
+<script>
+const textarea = document.getElementById('content');
+const charCurrent = document.getElementById('char-current');
+textarea.addEventListener('input', () => {
+  charCurrent.textContent = textarea.value.length;
+  charCurrent.style.color = textarea.value.length > 280 ? '#e74c3c' : '';
+});
+
+document.getElementById('create-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const content = document.getElementById('content').value.trim();
+  const scheduledAt = document.getElementById('scheduled_at').value;
+  if (!content || !scheduledAt) return;
+
+  const resp = await fetch('/api/posts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, scheduled_at: new Date(scheduledAt).toISOString() }),
+  });
+
+  if (resp.ok) {
+    window.location.href = '/';
+  } else {
+    const err = await resp.json();
+    alert('エラー: ' + (err.detail || JSON.stringify(err)));
+  }
+});
+</script>
+{% endblock %}

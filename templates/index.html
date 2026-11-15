@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>投稿一覧</h1>
+
+<div class="filters">
+  <button class="filter-btn active" data-status="all">すべて</button>
+  <button class="filter-btn" data-status="scheduled">予約中</button>
+  <button class="filter-btn" data-status="posted">投稿済み</button>
+  <button class="filter-btn" data-status="failed">失敗</button>
+  <button class="filter-btn" data-status="cancelled">キャンセル</button>
+</div>
+
+{% if posts %}
+<div class="post-list">
+  {% for post in posts %}
+  <div class="post-card" data-status="{{ post.status.value }}">
+    <div class="post-header">
+      <span class="status-badge status-{{ post.status.value }}">
+        {% if post.status.value == "scheduled" %}予約中
+        {% elif post.status.value == "posted" %}投稿済み
+        {% elif post.status.value == "failed" %}失敗
+        {% elif post.status.value == "cancelled" %}キャンセル{% endif %}
+      </span>
+      <span class="post-date">{{ post.scheduled_at.strftime('%Y/%m/%d %H:%M') }}</span>
+    </div>
+    <p class="post-content">{{ post.content }}</p>
+    <div class="post-actions">
+      {% if post.status.value == "scheduled" %}
+        <a href="/edit/{{ post.id }}" class="btn btn-sm">編集</a>
+        <button class="btn btn-sm btn-danger" onclick="cancelPost({{ post.id }})">キャンセル</button>
+      {% elif post.status.value == "failed" %}
+        <button class="btn btn-sm btn-primary" onclick="retryPost({{ post.id }})">リトライ</button>
+        <span class="error-msg">{{ post.error_message }}</span>
+      {% elif post.status.value == "posted" and post.tweet_id %}
+        <a href="https://x.com/i/status/{{ post.tweet_id }}" target="_blank" class="btn btn-sm">Xで見る</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <p>投稿がまだありません</p>
+  <a href="/new" class="btn btn-primary">最初の投稿を作成</a>
+</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const status = btn.dataset.status;
+    document.querySelectorAll('.post-card').forEach(card => {
+      card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
+    });
+  });
+});
+
+async function cancelPost(id) {
+  if (!confirm('この投稿をキャンセルしますか？')) return;
+  await fetch(`/api/posts/${id}`, { method: 'DELETE' });
+  location.reload();
+}
+
+async function retryPost(id) {
+  await fetch(`/api/posts/${id}/retry`, { method: 'POST' });
+  location.reload();
+}
+</script>
+{% endblock %}
